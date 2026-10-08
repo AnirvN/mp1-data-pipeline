@@ -13,23 +13,22 @@ import logging
 import sys
 from pathlib import Path
 from data_loaders import load_data
+from data_processor import process_data, create_cleaning_report
 
 logger = logging.getLogger(__name__)
 
 
 def setup_logging(verbose=False):
-    """Configure logging for the pipeline."""
     level = logging.DEBUG if verbose else logging.INFO
 
     logging.basicConfig(
         level=level,
-        format="%(asctime)s %(levelname)-8s %(message)s",
+        format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
         datefmt="%H:%M:%S"
     )
 
 
 def parse_arguments():
-    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Run the data processing pipeline."
     )
@@ -47,10 +46,9 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--format",
-        choices=["csv", "json"],
-        default="csv",
-        help="Output format"
+        "--config",
+        required=True,
+        help="Path to the YAML configuration file"
     )
 
     parser.add_argument(
@@ -73,23 +71,46 @@ def validate_input(filepath):
 
 
 def main():
-    """Main pipeline function."""
     args = parse_arguments()
-
     setup_logging(args.verbose)
 
-    logger.debug(
-        f"Arguments parsed: input={args.input}, "
-        f"output={args.output}, format={args.format}"
-    )
+    logger.debug(f"Arguments parsed: {args}")
 
+    # Validate input and config files
     if not validate_input(args.input):
         sys.exit(1)
-        
+
+    if not validate_input(args.config):
+        sys.exit(1)
+
+    # Load data and configuration
     try:
         data = load_data(args.input)
+        config = load_data(args.config)
     except ValueError:
         sys.exit(1)
+
+    # Save a copy of the original data
+    original_data = data.copy()
+
+    # Process the data
+    try:
+        cleaned_data = process_data(data, config)
+    except ValueError:
+        sys.exit(1)
+
+    # Create and print cleaning report
+    report = create_cleaning_report(original_data, cleaned_data)
+    print(report)
+
+    # Log results
+    logger.info(
+        f"Processing complete: {len(original_data)} → {len(cleaned_data)} rows"
+    )
+
+    # Save cleaned data
+    cleaned_data.to_csv(args.output, index=False)
+    logger.info(f"Saved cleaned data to {args.output}")
 
 
 if __name__ == "__main__":
